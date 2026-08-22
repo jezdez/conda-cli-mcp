@@ -4,23 +4,35 @@ import argparse
 import json
 import sys
 from collections.abc import Mapping
-from importlib import metadata
+from importlib import import_module, metadata
 from typing import TYPE_CHECKING
 
-from .models import (
-    ActionKind,
-    Argument,
-    Command,
-    Diagnostic,
-    ExclusiveGroup,
-    Plugin,
-    Program,
-)
+if __package__:
+    from .models import (
+        ActionKind,
+        Argument,
+        Command,
+        Diagnostic,
+        ExclusiveGroup,
+        Plugin,
+        Program,
+    )
+else:
+    from models import (  # ty: ignore[unresolved-import]
+        ActionKind,
+        Argument,
+        Command,
+        Diagnostic,
+        ExclusiveGroup,
+        Plugin,
+        Program,
+    )
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
+    from typing import Any
 
-    from .models import NArgs, ValueType
+    from .models import JsonValue, NArgs, ValueType
 
 
 class _UnsupportedParserFeature(ValueError):
@@ -82,6 +94,184 @@ def inspect_plugins() -> tuple[Plugin, ...]:
             ),
         )
     )
+
+
+def inspect_completion_command(
+    command_path: Sequence[str],
+) -> dict[str, JsonValue]:
+    """Read one command from conda-completion through its public target API."""
+    requested = tuple(command_path)
+    if any(
+        not part or part.startswith("-") or any(char.isspace() for char in part)
+        for part in requested
+    ):
+        raise ValueError("invalid_command_path")
+
+    unavailable: dict[str, JsonValue] = {
+        "availability": "not_installed",
+        "requested_command_path": list(requested),
+        "resolved_command_path": None,
+        "alias_target": None,
+        "command": None,
+        "manifest": None,
+        "hint": "Install conda-completion in the target conda environment.",
+    }
+    try:
+        completion_exceptions = import_module("conda_completion.exceptions")
+        completion_manifest = import_module("conda_completion.manifest")
+        completion_paths = import_module("conda_completion.paths")
+        completion_plugin = import_module("conda_completion.plugin")
+    except ModuleNotFoundError as error:
+        if error.name == "conda_completion":
+            return unavailable
+        return {
+            **unavailable,
+            "availability": "unavailable",
+            "hint": (
+                "Repair the conda-completion installation in the target environment."
+            ),
+        }
+    except ImportError:
+        return {
+            **unavailable,
+            "availability": "unavailable",
+            "hint": "Use a conda-completion version with the public manifest API.",
+        }
+
+    try:
+        completion_version: JsonValue = metadata.version("conda-completion")
+    except metadata.PackageNotFoundError:
+        completion_version = None
+    if isinstance(completion_version, str):
+        try:
+            release = tuple(int(part) for part in completion_version.split(".", 2)[:2])
+        except ValueError:
+            release = ()
+        if release and release < (0, 3):
+            return {
+                **unavailable,
+                "availability": "unavailable",
+                "hint": "Use conda-completion 0.3 or newer in the target environment.",
+            }
+
+    required_functions = (
+        (completion_manifest, "read_manifest"),
+        (completion_paths, "manifest_path"),
+    )
+    if not all(
+        callable(getattr(module, name, None)) for module, name in required_functions
+    ):
+        return {
+            **unavailable,
+            "availability": "unavailable",
+            "hint": "Use conda-completion 0.3 or newer in the target environment.",
+        }
+
+    path = completion_paths.manifest_path()
+    try:
+        manifest = completion_manifest.read_manifest(path)
+    except FileNotFoundError:
+        return {
+            **unavailable,
+            "availability": "not_generated",
+            "hint": "Run 'conda completion generate' in the target environment.",
+        }
+    except (completion_exceptions.ManifestError, OSError):
+        return {
+            **unavailable,
+            "availability": "unavailable",
+            "hint": "Regenerate completion.msgpack in the target environment.",
+        }
+
+    if not all(
+        hasattr(manifest, name)
+        for name in (
+            "aliases",
+            "commands",
+            "generated_at",
+            "plugin_hash",
+            "root_options",
+            "runtime_sources",
+            "version",
+        )
+    ):
+        return {
+            **unavailable,
+            "availability": "unavailable",
+            "hint": "Use conda-completion 0.3 or newer in the target environment.",
+        }
+
+    resolved = list(requested)
+    alias_target: list[str] | None = None
+    if resolved and (alias := manifest.aliases.get(resolved[0])) is not None:
+        alias_target = list(alias.target)
+        resolved = [*alias_target, *resolved[1:]]
+
+    options = manifest.root_options
+    positionals: list[Any] = []
+    subcommands = manifest.commands
+    exclusive_groups: list[list[str]] = []
+    summary = None
+    for part in resolved:
+        command = subcommands.get(part)
+        if command is None:
+            raise LookupError("unknown_command")
+        summary = command.summary
+        options = command.options
+        positionals = command.positionals
+        subcommands = command.subcommands
+        exclusive_groups = command.exclusive_groups
+
+    try:
+        current_plugin_hash = completion_plugin.plugin_entry_point_hash()
+    except Exception:
+        current_plugin_hash = None
+    stored_plugin_hash = manifest.plugin_hash or None
+    stale = (
+        current_plugin_hash != stored_plugin_hash
+        if current_plugin_hash is not None and stored_plugin_hash is not None
+        else None
+    )
+    try:
+        command_payload: JsonValue = {
+            "summary": summary,
+            "options": [
+                {"name": name, **option.to_dict()} for name, option in options.items()
+            ],
+            "positionals": [position.to_dict() for position in positionals],
+            "subcommands": [
+                {"name": name, "summary": command.summary}
+                for name, command in subcommands.items()
+            ],
+            "exclusive_groups": exclusive_groups,
+        }
+        runtime_sources: JsonValue = {
+            name: source.to_dict() for name, source in manifest.runtime_sources.items()
+        }
+    except (AttributeError, TypeError, ValueError):
+        return {
+            **unavailable,
+            "availability": "unavailable",
+            "hint": "Use conda-completion 0.3 or newer in the target environment.",
+        }
+
+    return {
+        "availability": "available",
+        "requested_command_path": list(requested),
+        "resolved_command_path": resolved,
+        "alias_target": alias_target,
+        "command": command_payload,
+        "manifest": {
+            "version": manifest.version,
+            "generated_at": manifest.generated_at,
+            "stored_plugin_hash": stored_plugin_hash,
+            "current_plugin_hash": current_plugin_hash,
+            "stale": stale,
+            "conda_completion_version": completion_version,
+            "runtime_sources": runtime_sources,
+        },
+        "hint": None,
+    }
 
 
 def inspect_parser(
@@ -256,7 +446,7 @@ def _normalize_nargs(value: object) -> NArgs:
         return "*"
     if value == "+":
         return "+"
-    raise _UnsupportedParserFeature(f"unsupported nargs value {value!r}")
+    raise _UnsupportedParserFeature("unsupported nargs value")
 
 
 def _normalize_choices(action: argparse.Action) -> tuple[str, ...]:
@@ -272,7 +462,7 @@ def _normalize_choices(action: argparse.Action) -> tuple[str, ...]:
         return tuple(str(choice) for choice in values)
     except Exception as error:
         raise _UnsupportedParserFeature(
-            f"could not evaluate choices: {type(error).__name__}: {error}"
+            f"could not evaluate choices: {type(error).__name__}"
         ) from error
 
 
@@ -342,10 +532,29 @@ def _qualified_name(action: argparse.Action) -> str:
 def main(argv: Sequence[str] | None = None) -> int:
     """Print discovery JSON from the target conda interpreter."""
     worker_parser = argparse.ArgumentParser()
-    worker_parser.add_argument("--plugins", action="store_true")
+    mode = worker_parser.add_mutually_exclusive_group()
+    mode.add_argument("--plugins", action="store_true")
+    mode.add_argument("--completion-command")
     options = worker_parser.parse_args(argv)
     if options.plugins:
         payload = [plugin.as_dict() for plugin in inspect_plugins()]
+        sys.stdout.write(
+            f"{json.dumps(payload, separators=(',', ':'), sort_keys=True)}\n"
+        )
+        return 0
+    if options.completion_command is not None:
+        try:
+            request = json.loads(options.completion_command)
+            command_path = request["command_path"]
+            if not isinstance(command_path, list) or not all(
+                isinstance(part, str) for part in command_path
+            ):
+                raise TypeError
+            payload = inspect_completion_command(command_path)
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+            payload = {"error": "invalid_command_path"}
+        except LookupError:
+            payload = {"error": "unknown_command"}
         sys.stdout.write(
             f"{json.dumps(payload, separators=(',', ':'), sort_keys=True)}\n"
         )

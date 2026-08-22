@@ -1,0 +1,64 @@
+schema_version: 1
+
+context:
+  version: ${{ env.get("SETUPTOOLS_SCM_PRETEND_VERSION", default="0.0.0dev0") }}
+  python_min: "3.10"
+
+package:
+  name: conda-cli-mcp
+  version: ${{ version }}
+
+source:
+  path: ..
+
+build:
+  number: 0
+  noarch: python
+  script:
+    env:
+      SETUPTOOLS_SCM_PRETEND_VERSION: ${{ version }}
+    content: ${{ PYTHON }} -m pip install . -vv --no-deps --no-build-isolation
+  python:
+    entry_points:
+      - conda-cli-mcp = conda_cli_mcp.cli:main
+
+requirements:
+  host:
+    - python ${{ python_min }}.*
+    - hatchling >=1.27
+    - hatch-vcs >=0.4
+    - pip
+  run:
+    - python >=${{ python_min }}
+    - conda >=26.7,<27
+    - anyio >=4.9
+    - jsonschema >=4.20
+    - mcp >=2,<3
+
+tests:
+  - python:
+      imports:
+        - conda_cli_mcp
+      pip_check: true
+      python_version: ${{ python_min }}.*
+  - requirements:
+      run:
+        - python ${{ python_min }}.*
+    script:
+      - conda-cli-mcp --allow-write --allow-exec --output-limit-bytes 1048576 --stdin-limit-bytes 1048576 --help
+
+about:
+  summary: Expose conda and its plugin commands through the Model Context Protocol
+  description: |
+    conda-cli-mcp discovers the CLI of a configured conda installation and
+    exposes raw argv execution plus structured tools for introspectable
+    commands. Commands supplied by conda plugins participate in the same
+    catalog and normal conda execution retains non-command plugin hooks.
+  license: BSD-3-Clause
+  license_file: LICENSE
+  homepage: https://github.com/jezdez/conda-cli-mcp
+  repository: https://github.com/jezdez/conda-cli-mcp
+
+extra:
+  recipe-maintainers:
+    - jezdez

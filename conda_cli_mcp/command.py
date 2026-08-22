@@ -54,6 +54,12 @@ def argument_input_schema(argument: Argument) -> dict[str, Any]:
             "number": "number",
         }[argument.value_type]
     }
+    if (
+        not argument.flags
+        and argument.value_type == "string"
+        and argument.nargs != "remainder"
+    ):
+        scalar["pattern"] = "^(?!-)"
     if argument.choices:
         if argument.value_type == "integer":
             scalar["enum"] = [int(choice) for choice in argument.choices]
@@ -285,6 +291,15 @@ class CommandTool:
     def name(self) -> str:
         """Return the deterministic MCP tool name."""
         return canonical_tool_name(self.path, disambiguate=self.disambiguate_name)
+
+    @property
+    def accepts_opaque_arguments(self) -> bool:
+        """Return whether this tool accepts an unparsed argv remainder."""
+        return self.passthrough_id is not None or any(
+            argument.nargs in {"parser", "remainder"}
+            for command in self.commands
+            for argument in command.arguments
+        )
 
     @property
     def input_schema(self) -> dict[str, Any]:

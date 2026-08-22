@@ -195,6 +195,10 @@ def test_command_tools_build_canonical_leaves_and_preserve_scope() -> None:
             {"anyOf": [{"type": "string"}, {"type": "null"}]},
         ),
         (
+            make_argument(ActionKind.STORE, flags=()),
+            {"type": "string", "pattern": "^(?!-)"},
+        ),
+        (
             make_argument(ActionKind.APPEND),
             {"type": "array", "items": {"type": "string"}},
         ),
@@ -440,6 +444,19 @@ def test_passthrough_id_is_disambiguated_and_tokens_are_unchanged() -> None:
         "configured",
         "--",
         "$(not-a-shell)",
+    )
+
+
+def test_typed_positionals_reject_options_but_remainder_preserves_them() -> None:
+    positional = make_tool(make_argument(ActionKind.STORE, flags=()))
+    remainder = make_tool(make_argument(ActionKind.STORE, flags=(), nargs="remainder"))
+
+    with pytest.raises(ValidationError):
+        positional.compile({"value": "--json"})
+    assert remainder.compile({"value": ["python", "-V"]}) == (
+        "example",
+        "python",
+        "-V",
     )
 
 

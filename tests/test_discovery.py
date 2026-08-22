@@ -6,11 +6,20 @@ import sys
 from dataclasses import FrozenInstanceError
 from importlib import metadata
 from types import ModuleType, SimpleNamespace
+from typing import TYPE_CHECKING
 
 import pytest
 
-from conda_cli_mcp.discovery import inspect_parser, inspect_plugins, main
+from conda_cli_mcp.discovery import (
+    inspect_completion_command,
+    inspect_parser,
+    inspect_plugins,
+    main,
+)
 from conda_cli_mcp.models import ActionKind, Diagnostic, Plugin, Program
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 class LazyChoicesAction(argparse.Action):
@@ -52,6 +61,11 @@ class UnsupportedAction(argparse.Action):
         option_string: str | None = None,
     ) -> None:
         setattr(namespace, self.dest, values)
+
+
+class ExplodingChoices:
+    def __iter__(self) -> None:
+        raise RuntimeError("secret-choice-source")
 
 
 def test_inspect_parser_discovers_nested_commands_aliases_and_groups() -> None:
@@ -198,6 +212,8 @@ def test_discovery_limits_raw_only_to_affected_visible_commands() -> None:
     bad.add_argument("--unknown", action=UnsupportedAction)
     bad_nargs = bad.add_argument("--bad-nargs", action=LazyChoicesAction)
     bad_nargs.nargs = "unsupported"
+    bad_choices = bad.add_argument("--bad-choices")
+    bad_choices.choices = ExplodingChoices()
 
     catalog = inspect_parser(parser)
 
@@ -209,7 +225,7 @@ def test_discovery_limits_raw_only_to_affected_visible_commands() -> None:
     assert not discovered["hidden"].arguments
     assert discovered["bad"].raw_only
     assert not discovered["bad"].arguments
-    assert len(catalog.diagnostics) == 2
+    assert len(catalog.diagnostics) == 3
     assert {diagnostic.path for diagnostic in catalog.diagnostics} == {("bad",)}
     assert any(
         diagnostic.reason == "unsupported argparse action"
@@ -218,6 +234,11 @@ def test_discovery_limits_raw_only_to_affected_visible_commands() -> None:
     assert any(
         "unsupported nargs" in diagnostic.reason for diagnostic in catalog.diagnostics
     )
+    assert any(
+        diagnostic.reason == "could not evaluate choices: RuntimeError"
+        for diagnostic in catalog.diagnostics
+    )
+    assert "secret-choice-source" not in catalog.to_json()
 
 
 def test_discovery_marks_greedy_plugin_commands_as_passthrough() -> None:
@@ -357,6 +378,202 @@ def test_inspect_plugins_uses_entry_points_and_public_hook_specs(
     assert json.loads(capsys.readouterr().out) == [
         plugin.as_dict() for plugin in plugins
     ]
+
+
+def test_inspect_completion_command_uses_public_target_api(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    class Spec:
+        def __init__(self, **data: object) -> None:
+            self.data = data
+
+        def to_dict(self) -> dict[str, object]:
+            return self.data
+
+    class CommandSpec:
+        def __init__(
+            self,
+            summary: str,
+            *,
+            options: dict[str, Spec] | None = None,
+            positionals: list[Spec] | None = None,
+            subcommands: dict[str, CommandSpec] | None = None,
+            exclusive_groups: list[list[str]] | None = None,
+        ) -> None:
+            self.summary = summary
+            self.options = options or {}
+            self.positionals = positionals or []
+            self.subcommands = subcommands or {}
+            self.exclusive_groups = exclusive_groups or []
+
+    manifest = SimpleNamespace(
+        version=1,
+        generated_at="2026-08-22T12:00:00Z",
+        plugin_hash="same-hash",
+        root_options={"--json": Spec(description="JSON output")},
+        commands={
+            "env": CommandSpec(
+                "Manage environments",
+                subcommands={
+                    "list": CommandSpec(
+                        "List environments",
+                        options={
+                            "--name": Spec(
+                                short="-n",
+                                completion_type="env_name",
+                            )
+                        },
+                        positionals=[
+                            Spec(
+                                name="prefix",
+                                completion={"sources": ["environment"]},
+                            )
+                        ],
+                        exclusive_groups=[["--name", "--prefix"]],
+                    )
+                },
+            ),
+            "exec": CommandSpec("Execute a command"),
+        },
+        aliases={"cx": SimpleNamespace(target=["exec"])},
+        runtime_sources={
+            "environment": Spec(kind="directory_entries", max_entries=100)
+        },
+    )
+    completion_path = tmp_path / "completion.msgpack"
+    modules = {
+        "conda_completion.exceptions": SimpleNamespace(ManifestError=RuntimeError),
+        "conda_completion.manifest": SimpleNamespace(
+            read_manifest=lambda path: manifest if path == completion_path else None
+        ),
+        "conda_completion.paths": SimpleNamespace(
+            manifest_path=lambda: completion_path
+        ),
+        "conda_completion.plugin": SimpleNamespace(
+            plugin_entry_point_hash=lambda: "same-hash"
+        ),
+    }
+    monkeypatch.setattr(
+        "conda_cli_mcp.discovery.import_module",
+        modules.__getitem__,
+    )
+    monkeypatch.setattr(
+        "conda_cli_mcp.discovery.metadata.version",
+        lambda _distribution: "0.3.0",
+    )
+
+    nested = inspect_completion_command(("env", "list"))
+    alias = inspect_completion_command(("cx",))
+
+    assert nested["availability"] == "available"
+    assert nested["command"] == {
+        "summary": "List environments",
+        "options": [
+            {
+                "name": "--name",
+                "short": "-n",
+                "completion_type": "env_name",
+            }
+        ],
+        "positionals": [{"name": "prefix", "completion": {"sources": ["environment"]}}],
+        "subcommands": [],
+        "exclusive_groups": [["--name", "--prefix"]],
+    }
+    assert nested["manifest"] == {
+        "version": 1,
+        "generated_at": "2026-08-22T12:00:00Z",
+        "stored_plugin_hash": "same-hash",
+        "current_plugin_hash": "same-hash",
+        "stale": False,
+        "conda_completion_version": "0.3.0",
+        "runtime_sources": {
+            "environment": {"kind": "directory_entries", "max_entries": 100}
+        },
+    }
+    assert alias["resolved_command_path"] == ["exec"]
+    assert alias["alias_target"] == ["exec"]
+
+
+@pytest.mark.parametrize(
+    ("failure", "availability"),
+    [
+        (
+            ModuleNotFoundError(
+                "No module named 'conda_completion'", name="conda_completion"
+            ),
+            "not_installed",
+        ),
+        (FileNotFoundError(), "not_generated"),
+        (OSError(), "unavailable"),
+    ],
+)
+def test_inspect_completion_command_reports_availability(
+    monkeypatch: pytest.MonkeyPatch,
+    failure: Exception,
+    availability: str,
+) -> None:
+    if isinstance(failure, ModuleNotFoundError):
+
+        def import_failure(_name: str) -> ModuleType:
+            raise failure
+
+        monkeypatch.setattr(
+            "conda_cli_mcp.discovery.import_module",
+            import_failure,
+        )
+    else:
+
+        def read_failure(_path: object) -> None:
+            raise failure
+
+        modules = {
+            "conda_completion.exceptions": SimpleNamespace(ManifestError=RuntimeError),
+            "conda_completion.manifest": SimpleNamespace(read_manifest=read_failure),
+            "conda_completion.paths": SimpleNamespace(
+                manifest_path=lambda: "completion.msgpack"
+            ),
+            "conda_completion.plugin": SimpleNamespace(
+                plugin_entry_point_hash=lambda: "hash"
+            ),
+        }
+        monkeypatch.setattr(
+            "conda_cli_mcp.discovery.import_module",
+            modules.__getitem__,
+        )
+
+    result = inspect_completion_command(())
+
+    assert result["availability"] == availability
+    assert result["command"] is None
+
+
+def test_inspect_completion_command_rejects_older_public_api(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    modules = {
+        "conda_completion.exceptions": SimpleNamespace(ManifestError=RuntimeError),
+        "conda_completion.manifest": SimpleNamespace(read_manifest=lambda _path: None),
+        "conda_completion.paths": SimpleNamespace(
+            manifest_path=lambda: "completion.msgpack"
+        ),
+        "conda_completion.plugin": SimpleNamespace(),
+    }
+    monkeypatch.setattr(
+        "conda_cli_mcp.discovery.import_module",
+        modules.__getitem__,
+    )
+    monkeypatch.setattr(
+        "conda_cli_mcp.discovery.metadata.version",
+        lambda _distribution: "0.2.0",
+    )
+
+    result = inspect_completion_command(())
+
+    assert result["availability"] == "unavailable"
+    assert result["hint"] == (
+        "Use conda-completion 0.3 or newer in the target environment."
+    )
 
 
 def test_module_entry_point_prints_catalog_json(

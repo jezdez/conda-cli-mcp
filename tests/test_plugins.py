@@ -141,8 +141,19 @@ async def test_normal_conda_execution_runs_non_command_hook(
 ) -> None:
     executor, events = conda_with_fixture_plugin
 
+    disabled = await executor.execute(("--no-plugins", "info", "--json"))
+    unavailable = await executor.execute(
+        (
+            "--no-plugins",
+            "mcp-configured-fixture",
+            "--message",
+            "ignored",
+        )
+    )
     result = await executor.execute(("info", "--json"))
 
+    assert disabled.exit_code == 0
+    assert unavailable.exit_code != 0
     assert result.exit_code == 0
     assert isinstance(result.parsed_json, dict)
     assert events.read_text().splitlines() == ["pre:info"]

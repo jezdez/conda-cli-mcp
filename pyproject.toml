@@ -66,6 +66,21 @@ ty = ">=0.0.70,<0.1"
 [tool.pixi.feature.test.dependencies]
 pytest = ">=8"
 
+[tool.pixi.feature.build.dependencies]
+rattler-build = ">=0.74"
+
+[tool.pixi.feature.build.tasks]
+package = { cmd = "rattler-build build --recipe recipe --output-dir dist --channel conda-forge", description = "Build and test the conda package" }
+
+[tool.pixi.feature.docs.dependencies]
+conda-sphinx-theme = ">=0.2"
+myst-parser = ">=3.0"
+sphinx = ">=7.0"
+sphinx-design = ">=0.6"
+
+[tool.pixi.feature.docs.tasks]
+docs = { cmd = "sphinx-build -W --keep-going -n -b dirhtml docs docs/_build/dirhtml", description = "Build documentation" }
+
 [tool.pixi.feature.py310.dependencies]
 python = "3.10.*"
 
@@ -74,6 +89,8 @@ python = "3.14.*"
 
 [tool.pixi.environments]
 default = { features = ["dev", "test"], solve-group = "default" }
+build = { features = ["build"], solve-group = "build" }
+docs = { features = ["docs"], no-default-feature = true }
 test-py310 = { features = ["test", "py310"], solve-group = "test-py310" }
 test-py314 = { features = ["test", "py314"], solve-group = "test-py314" }
 

@@ -54,7 +54,10 @@ class ExecutionResult:
             return "conda command timed out"
         if self.cancelled:
             return "conda command was cancelled"
-        return f"conda command exited with {self.exit_code}"
+        summary = f"conda command exited with {self.exit_code}"
+        if self.restart_required:
+            return f"{summary}. Restart the MCP server to refresh conda tools"
+        return summary
 
 
 class ActionKind(str, Enum):

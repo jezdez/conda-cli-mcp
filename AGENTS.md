@@ -27,6 +27,10 @@
 - Do not expose every conda plugin hook as an independent MCP tool.
   Non-command hooks participate through normal conda execution.
 
+- Optional plugin integrations must run through public interfaces in
+  the target interpreter. Do not duplicate a plugin's cache format,
+  path resolution, or validation in the MCP server.
+
 - Shell commands may return activation code or environment changes.
   Never claim to mutate the shell of the MCP host.
 
@@ -190,9 +194,9 @@
 - Bound execution time and captured output. Report truncation rather
   than consuming unbounded memory.
 
-- Cancellation must terminate the child, wait for a bounded grace
-  period, then kill it if necessary. Do not leave child processes
-  running.
+- Cancellation must terminate the process tree, wait for a bounded
+  grace period, then kill it if necessary. Do not leave descendant
+  processes running.
 
 - Never log complete environments, credentials, tokens, authentication
   headers, or unredacted command output that may contain secrets.
@@ -234,7 +238,7 @@
 - After changes to project dependencies, features, tasks, or workspace
   settings, run `pixi lock` and commit the updated `pixi.lock`.
 
-## Documentation and clean-room rules
+## Documentation
 
 - Use Sphinx with `conda-sphinx-theme`, MyST, and sphinx-design when
   documentation is introduced.
@@ -245,10 +249,6 @@
 - Document reachability, discoverability, plugin participation, safety
   policy, shell limitations, restart behavior, and supported conda
   versions explicitly.
-
-- Keep design notes and implementation provenance sufficient to show
-  that this project was independently designed from conda, argparse,
-  MCP specifications, and public documentation.
 
 ## Pull requests and releases
 
