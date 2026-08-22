@@ -106,16 +106,10 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: refs/tags/${{ inputs.tag }}
-          persist-credentials: false
       - uses: prefix-dev/setup-pixi@f00437f565399d418b0acc85936d12c1fb668347 # v0.10.1
         with:
-          environments: build
           pixi-version: v0.77.0
-          frozen: true
-          cache: true
+          run-install: false
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: conda-package-${{ inputs.tag }}
@@ -135,7 +129,7 @@ jobs:
             echo "Expected exactly one conda package." >&2
             exit 1
           fi
-          pixi run --locked -e build rattler-build upload anaconda \
+          pixi upload anaconda \
             --owner jezdez \
             --channel main \
             "${packages[0]}"
