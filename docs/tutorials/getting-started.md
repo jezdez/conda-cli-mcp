@@ -1,39 +1,51 @@
 # Connect a read-only conda server
 
-This tutorial runs `conda-cli-mcp` from its source checkout, connects a generic
-stdio MCP client, and inspects the tools discovered from the target conda
-installation.
+This tutorial installs `conda-cli-mcp` in an isolated environment, connects a
+generic stdio MCP client, and inspects the tools discovered from the target
+conda installation.
 
 ## Prerequisites
 
-- Git
-- [Pixi](https://pixi.sh/)
+- Python 3.10 or newer
+- [pipx](https://pipx.pypa.io/)
 - an MCP client that can start a local stdio server
 - a target conda version in the supported `>=26.7,<27` range
 
 ## Prepare the server
 
-Clone the repository and install its locked development environment:
+Install the server without modifying the target conda environment:
 
 ```console
-git clone https://github.com/jezdez/conda-cli-mcp.git
-cd conda-cli-mcp
-pixi install --locked
+pipx install conda-cli-mcp
 ```
 
 Confirm the server and target conda are available:
 
 ```console
-pixi run conda-cli-mcp --version
-pixi run conda --version
+conda-cli-mcp --version
+conda --version
 ```
 
-Find the absolute executable paths that the MCP client will use:
+Find the absolute executable paths that the MCP client will use.
+
+::::{tab-set}
+:::{tab-item} POSIX
 
 ```console
-pixi run python -c "import shutil; print(shutil.which('conda-cli-mcp'))"
-pixi run python -c "import shutil; print(shutil.which('conda.exe') or shutil.which('conda'))"
+python3 -c "import shutil; print(shutil.which('conda-cli-mcp'))"
+python3 -c "import os, shutil; print(os.environ.get('CONDA_EXE') or shutil.which('conda'))"
 ```
+
+:::
+:::{tab-item} PowerShell
+
+```powershell
+py -c "import shutil; print(shutil.which('conda-cli-mcp'))"
+py -c "import os, shutil; print(os.environ.get('CONDA_EXE') or shutil.which('conda.exe'))"
+```
+
+:::
+::::
 
 On Windows, select `conda.exe`. Batch launchers ending in `.bat` or `.cmd` are
 not supported.

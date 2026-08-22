@@ -9,9 +9,8 @@ Conda still performs configuration loading, plugin ordering, solving,
 transactions, authentication, command hooks, and error handling. The MCP
 server runs conda in bounded child processes without invoking a shell.
 
-:::{warning}
-This project is under active development and has no published package release.
-Use the source checkout for evaluation.
+:::{note}
+This project is alpha software.
 :::
 
 ## Choose a documentation path
@@ -54,8 +53,9 @@ safety model.
 
 ## Supported target
 
-The current supported target range is conda `>=26.7,<27`. The server process
-and target conda installation may live in different Python environments when
+The server requires Python 3.10 or newer and is tested on Linux, macOS, and
+Windows. The selected target must provide conda `>=26.7,<27`. The server and
+target conda installation may live in different Python environments when
 `--conda-exe` identifies the target explicitly.
 
 ```{toctree}
@@ -88,4 +88,11 @@ reference/mcp-interface
 
 explanation/architecture
 explanation/safety
+```
+
+```{toctree}
+:hidden:
+:caption: Project
+
+changelog
 ```

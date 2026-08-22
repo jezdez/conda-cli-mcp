@@ -13,8 +13,19 @@ When `conda-completion` 0.3 or newer is installed in the target environment, a
 read-only metadata tool exposes its command-specific completion hints through
 the plugin's public Python API.
 
-The project is under active development and is not published yet. It supports
+The project is alpha software. It requires Python 3.10 or newer and supports
 target conda versions `>=26.7,<27`.
+
+## Installation
+
+Install the published command into an isolated environment:
+
+```console
+pipx install conda-cli-mcp
+```
+
+Keep the server environment separate from the target conda installation and
+select that installation with `--conda-exe`.
 
 ## Documentation
 
@@ -24,8 +35,9 @@ The [documentation](docs/index.md) is organized by purpose:
 - [How-to guides](docs/how-to/configure-the-server.md)
 - [Reference](docs/reference/server-cli.md)
 - [Explanation](docs/explanation/architecture.md)
+- [Changelog](CHANGELOG.md)
 
-The published site will live at
+Documentation is published at
 [jezdez.github.io/conda-cli-mcp](https://jezdez.github.io/conda-cli-mcp/).
 
 ## Safety

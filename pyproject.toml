@@ -23,6 +23,8 @@ dependencies = ["anyio>=4.9", "jsonschema>=4.20", "mcp>=2,<3"]
 dynamic = ["version"]
 
 [project.urls]
+changelog = "https://github.com/jezdez/conda-cli-mcp/blob/main/CHANGELOG.md"
+documentation = "https://jezdez.github.io/conda-cli-mcp/"
 repository = "https://github.com/jezdez/conda-cli-mcp"
 
 [project.scripts]
