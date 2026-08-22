@@ -12,6 +12,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/).
 - Added `ccm` as the standalone server command.
 - Added conda package publication to the `jezdez/main` channel.
 
+### Changed
+
+- Made the `jezdez` channel on Anaconda.org the primary documented
+  installation source.
+
 ### Removed
 
 - Removed the `conda-cli-mcp` console command in favor of `ccm`.

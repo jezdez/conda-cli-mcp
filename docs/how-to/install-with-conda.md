@@ -11,10 +11,10 @@ The `ccm` and `conda mcp` launchers require `conda-cli-mcp` 0.2.0 or newer.
 The version constraints below prevent the incompatible 0.1.0 command from
 being installed with this guide.
 
-## Install from the personal conda channel
+## Install from Anaconda.org
 
-Create a dedicated server prefix from the `conda-forge` and `jezdez/main`
-channels.
+Create a dedicated server prefix from the [`jezdez` channel on
+Anaconda.org](https://anaconda.org/jezdez/conda-cli-mcp) and `conda-forge`.
 
 ::::{tab-set}
 :::{tab-item} POSIX
@@ -24,8 +24,8 @@ server_prefix="$HOME/.local/share/conda-cli-mcp"
 conda create --yes --no-default-packages \
   --prefix "$server_prefix" \
   --override-channels \
-  --channel https://conda.anaconda.org/conda-forge \
-  --channel https://conda.anaconda.org/jezdez \
+  --channel jezdez \
+  --channel conda-forge \
   "conda-cli-mcp>=0.2"
 "$server_prefix/bin/ccm" --version
 ```
@@ -38,8 +38,8 @@ $serverPrefix = Join-Path $env:LOCALAPPDATA "conda-cli-mcp"
 conda create --yes --no-default-packages `
   --prefix $serverPrefix `
   --override-channels `
-  --channel https://conda.anaconda.org/conda-forge `
-  --channel https://conda.anaconda.org/jezdez `
+  --channel jezdez `
+  --channel conda-forge `
   "conda-cli-mcp>=0.2"
 & (Join-Path $serverPrefix "Scripts\ccm.exe") --version
 ```
@@ -56,12 +56,7 @@ execution avoids the default output capture and extra process introduced by
 Install `ccm` as an isolated PATH tool when conda-global is available:
 
 ```console
-conda global install "conda-cli-mcp>=0.2" \
-  --environment conda-cli-mcp \
-  --expose ccm \
-  --override-channels \
-  --channel https://conda.anaconda.org/conda-forge \
-  --channel https://conda.anaconda.org/jezdez
+conda global install "conda-cli-mcp>=0.2" --environment conda-cli-mcp --expose ccm --override-channels --channel jezdez --channel conda-forge
 ccm --version
 ```
 

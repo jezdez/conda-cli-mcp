@@ -23,10 +23,17 @@ installation without requiring `--conda-exe`. These launchers require
 
 ## Installation
 
-Choose the installation path that matches the MCP host:
+Install from the [`jezdez` channel on
+Anaconda.org](https://anaconda.org/jezdez/conda-cli-mcp):
 
-- [Start with pipx](docs/tutorials/getting-started.md)
-- [Install with conda](docs/how-to/install-with-conda.md)
+```console
+conda create --yes --name conda-cli-mcp --override-channels --channel jezdez --channel conda-forge "conda-cli-mcp>=0.2"
+conda activate conda-cli-mcp
+ccm --version
+```
+
+- [Follow the getting-started tutorial](docs/tutorials/getting-started.md)
+- [Choose another conda installation layout](docs/how-to/install-with-conda.md)
 - [Configure the server](docs/how-to/configure-the-server.md)
 
 ## Documentation

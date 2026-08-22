@@ -6,21 +6,22 @@ conda installation.
 
 ## Prerequisites
 
-- Python 3.10 or newer
-- [pipx](https://pipx.pypa.io/)
+- conda `>=26.7,<27`
 - an MCP client that can start a local stdio server
-- a target conda version in the supported `>=26.7,<27` range
 
 ## Prepare the server
 
 Install the server without modifying the target conda environment:
 
 ```console
-pipx install "conda-cli-mcp>=0.2"
+conda create --yes --name conda-cli-mcp --override-channels --channel jezdez --channel conda-forge "conda-cli-mcp>=0.2"
+conda activate conda-cli-mcp
 ```
 
-The version constraint prevents the incompatible 0.1.0 console command from
-being installed with this guide.
+This installs from the [`jezdez` channel on
+Anaconda.org](https://anaconda.org/jezdez/conda-cli-mcp). The version
+constraint prevents the incompatible 0.1.0 console command from being
+installed with this guide.
 
 Confirm the server and target conda are available:
 

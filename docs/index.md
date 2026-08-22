@@ -30,8 +30,8 @@ interface.
 :link: how-to/install-with-conda
 :link-type: doc
 
-Install from conda, select a target conda, set limits, enable operations, and
-refresh tools after plugin changes.
+Install from Anaconda.org, select a target conda, set limits, enable
+operations, and refresh tools after plugin changes.
 :::
 
 :::{grid-item-card} {octicon}`list-unordered` Reference
