@@ -86,3 +86,25 @@ jobs:
           name: conda-cli-mcp-0.0.0
           path: dist/noarch/*.conda
           if-no-files-found: error
+
+  pypi:
+    name: PyPI distributions
+    runs-on: ubuntu-latest
+    env:
+      SETUPTOOLS_SCM_PRETEND_VERSION: 0.0.0
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: prefix-dev/setup-pixi@f00437f565399d418b0acc85936d12c1fb668347 # v0.10.1
+        with:
+          pixi-version: v0.77.0
+          environments: release
+          frozen: true
+          cache: true
+          cache-write: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      - name: Build and check distributions
+        run: |
+          pixi run --locked -e release build-pypi
+          pixi run --locked -e release check-pypi
