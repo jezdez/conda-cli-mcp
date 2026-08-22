@@ -77,7 +77,7 @@ python = "3.10.*"
 python = "3.14.*"
 
 [tool.pixi.environments]
-dev = { features = ["dev", "test"], solve-group = "default" }
+default = { features = ["dev", "test"], solve-group = "default" }
 test-py310 = { features = ["test", "py310"], solve-group = "test-py310" }
 test-py314 = { features = ["test", "py314"], solve-group = "test-py314" }
 
