@@ -18,6 +18,7 @@ from mcp.types import (
 )
 
 from . import __version__
+from .command import command_tools
 
 if TYPE_CHECKING:
     from typing import Any, Final
@@ -26,6 +27,7 @@ if TYPE_CHECKING:
     from mcp.types import CallToolRequestParams, PaginatedRequestParams
 
     from .execution import CondaExecutor
+    from .models import ExecutionResult, Program
 
 EXECUTE_TOOL_NAME: Final = "conda_execute"
 EXECUTION_OUTPUT_SCHEMA: Final[dict[str, Any]] = {
@@ -86,7 +88,11 @@ EXECUTE_INPUT_SCHEMA: Final[dict[str, Any]] = {
 class CondaMCPServer:
     """MCP application exposing one conda executor."""
 
-    def __init__(self, executor: CondaExecutor) -> None:
+    def __init__(
+        self,
+        executor: CondaExecutor,
+        program: Program | None = None,
+    ) -> None:
         self.executor = executor
         self.execute_tool = Tool(
             name=EXECUTE_TOOL_NAME,
@@ -102,6 +108,12 @@ class CondaMCPServer:
         )
         self.input_validator = Draft202012Validator(EXECUTE_INPUT_SCHEMA)
         self.output_validator = Draft202012Validator(EXECUTION_OUTPUT_SCHEMA)
+        self.program = program
+        self.generated_tools = (
+            {tool.name: tool for tool in command_tools(program)}
+            if program is not None
+            else {}
+        )
         self.server = Server(
             "conda-cli-mcp",
             version=__version__,
@@ -114,8 +126,16 @@ class CondaMCPServer:
         _context: ServerRequestContext,
         _params: PaginatedRequestParams | None,
     ) -> ListToolsResult:
-        """List the raw phase-one execution tool."""
-        return ListToolsResult(tools=[self.execute_tool])
+        """List the raw executor and discovered structured command tools."""
+        return ListToolsResult(
+            tools=[
+                self.execute_tool,
+                *(
+                    tool.as_mcp_tool(output_schema=EXECUTION_OUTPUT_SCHEMA)
+                    for tool in self.generated_tools.values()
+                ),
+            ]
+        )
 
     async def execute(self, arguments: dict[str, Any]) -> CallToolResult:
         """Validate an MCP request and execute conda."""
@@ -130,6 +150,23 @@ class CondaMCPServer:
             stdin=arguments.get("stdin"),
             timeout_seconds=arguments.get("timeout_seconds"),
         )
+        return self.format_result(result)
+
+    async def execute_generated(
+        self,
+        name: str,
+        arguments: dict[str, Any],
+    ) -> CallToolResult:
+        """Compile and execute one generated command tool request."""
+        tool = self.generated_tools[name]
+        try:
+            argv = tool.compile(arguments)
+        except ValidationError as error:
+            raise MCPError(INVALID_PARAMS, error.message) from error
+        return self.format_result(await self.executor.execute(argv))
+
+    def format_result(self, result: ExecutionResult) -> CallToolResult:
+        """Convert one execution result into the common MCP result envelope."""
         structured = result.as_dict()
         self.output_validator.validate(structured)
         return CallToolResult(
@@ -144,9 +181,12 @@ class CondaMCPServer:
         params: CallToolRequestParams,
     ) -> CallToolResult:
         """Dispatch a low-level MCP tool request."""
-        if params.name != EXECUTE_TOOL_NAME:
-            raise MCPError(INVALID_PARAMS, f"Unknown tool: {params.name}")
-        return await self.execute(params.arguments or {})
+        arguments = params.arguments or {}
+        if params.name == EXECUTE_TOOL_NAME:
+            return await self.execute(arguments)
+        if params.name in self.generated_tools:
+            return await self.execute_generated(params.name, arguments)
+        raise MCPError(INVALID_PARAMS, f"Unknown tool: {params.name}")
 
     async def run_stdio(self) -> None:
         """Serve MCP over standard input and standard output."""

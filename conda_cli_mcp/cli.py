@@ -33,6 +33,12 @@ def create_parser() -> argparse.ArgumentParser:
     return parser
 
 
+async def serve(executor: CondaExecutor) -> None:
+    """Discover the target conda CLI and serve it over standard I/O."""
+    program = await executor.discover()
+    await CondaMCPServer(executor, program).run_stdio()
+
+
 def main(argv: Sequence[str] | None = None) -> None:
     """Run the configured MCP server."""
     args = create_parser().parse_args(argv)
@@ -40,5 +46,4 @@ def main(argv: Sequence[str] | None = None) -> None:
         args.conda_exe,
         timeout_seconds=args.timeout,
     )
-    server = CondaMCPServer(executor)
-    anyio.run(server.run_stdio, backend="asyncio")
+    anyio.run(serve, executor, backend="asyncio")
