@@ -94,12 +94,3 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.ref_name }}
         run: gh release edit "$RELEASE_TAG" --repo "$GH_REPO" --draft=false
-
-  publish-conda:
-    name: Publish conda package
-    needs: [publish-github-release]
-    permissions:
-      contents: read
-    uses: ./.github/workflows/publish-conda.yml
-    with:
-      tag: ${{ github.ref_name }}

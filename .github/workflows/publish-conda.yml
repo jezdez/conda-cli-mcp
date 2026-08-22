@@ -1,12 +1,9 @@
 name: Publish conda package
 
 on:
-  workflow_call:
-    inputs:
-      tag:
-        description: Existing source release tag to publish
-        required: true
-        type: string
+  push:
+    tags:
+      - "[0-9]+.[0-9]+.[0-9]+"
   workflow_dispatch:
     inputs:
       tag:
@@ -14,22 +11,26 @@ on:
         required: true
         type: string
 
-permissions: {}
+permissions:
+  contents: read
 
 concurrency:
-  group: publish-conda-${{ inputs.tag }}
+  group: publish-conda-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
-  build:
-    name: Build conda package
+  publish:
+    name: Publish to jezdez/main
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
+    environment:
+      name: anaconda
+      url: https://anaconda.org/jezdez/conda-cli-mcp
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: refs/tags/${{ inputs.tag }}
+          ref: refs/tags/${{ inputs.tag || github.ref_name }}
           fetch-depth: 0
           persist-credentials: false
       - uses: prefix-dev/setup-pixi@f00437f565399d418b0acc85936d12c1fb668347 # v0.10.1
@@ -38,10 +39,7 @@ jobs:
           pixi-version: v0.77.0
           frozen: true
           cache: true
-      - name: Validate source release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ inputs.tag }}
+      - name: Validate release tag
         run: |
           set -euo pipefail
 
@@ -53,67 +51,42 @@ jobs:
             echo "The checked-out commit does not match the release tag." >&2
             exit 1
           fi
-
-          release_state="$(
-            gh release view "$RELEASE_TAG" \
-              --json isDraft,isPrerelease,tagName \
-              --jq '[.tagName, .isDraft, .isPrerelease] | @tsv'
-          )"
-          IFS=$'\t' read -r published_tag is_draft is_prerelease <<< "$release_state"
-          if [ "$published_tag" != "$RELEASE_TAG" ] \
-            || [ "$is_draft" != "false" ] \
-            || [ "$is_prerelease" != "false" ]; then
-            echo "The tag must have a published stable GitHub release." >&2
-            exit 1
-          fi
       - name: Build exact package
-        env:
-          RELEASE_TAG: ${{ inputs.tag }}
         run: SETUPTOOLS_SCM_PRETEND_VERSION="$RELEASE_TAG" pixi run --locked -e build package
-      - name: Check package filename
-        env:
-          RELEASE_TAG: ${{ inputs.tag }}
+      - name: Validate unpublished package
         run: |
           set -euo pipefail
 
-          mapfile -t packages < <(find dist -type f -name '*.conda' -print)
+          mapfile -t packages < <(find dist/noarch -type f -name '*.conda' -print)
           if [ "${#packages[@]}" -ne 1 ]; then
-            echo "Expected exactly one conda package." >&2
+            echo "Expected exactly one noarch conda package." >&2
             exit 1
           fi
-          filename="${packages[0]##*/}"
-          case "$filename" in
-            "conda-cli-mcp-${RELEASE_TAG}-"*.conda) ;;
-            *)
-              echo "Package filename does not match the release tag." >&2
-              exit 1
-              ;;
-          esac
-      - name: Upload conda package
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: conda-package-${{ inputs.tag }}
-          path: dist/**/*.conda
-          if-no-files-found: error
 
-  publish:
-    name: Publish to jezdez/main
-    runs-on: ubuntu-latest
-    needs: [build]
-    environment:
-      name: anaconda
-      url: https://anaconda.org/jezdez/conda-cli-mcp
-    permissions:
-      contents: read
-    steps:
-      - uses: prefix-dev/setup-pixi@f00437f565399d418b0acc85936d12c1fb668347 # v0.10.1
-        with:
-          pixi-version: v0.77.0
-          run-install: false
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: conda-package-${{ inputs.tag }}
-          path: dist
+          metadata="$(
+            pixi run --locked -e build \
+              rattler-build package inspect --json "${packages[0]}"
+          )"
+          jq -e --arg version "$RELEASE_TAG" '
+            .index
+            | .name == "conda-cli-mcp"
+              and .version == $version
+              and .build_number == 0
+              and .subdir == "noarch"
+              and .noarch == "python"
+              and .license == "BSD-3-Clause"
+          ' <<< "$metadata" >/dev/null
+
+          status="$(
+            curl -sS \
+              -o /dev/null \
+              -w '%{http_code}' \
+              "https://api.anaconda.org/release/jezdez/conda-cli-mcp/${RELEASE_TAG}"
+          )"
+          if [ "$status" != "404" ]; then
+            echo "Anaconda.org release already exists or could not be checked." >&2
+            exit 1
+          fi
       - name: Upload immutable package
         env:
           ANACONDA_API_KEY: ${{ secrets.ANACONDA_API_KEY }}
@@ -124,46 +97,68 @@ jobs:
             echo "The anaconda environment must provide ANACONDA_API_KEY." >&2
             exit 1
           fi
-          mapfile -t packages < <(find dist -type f -name '*.conda' -print)
-          if [ "${#packages[@]}" -ne 1 ]; then
-            echo "Expected exactly one conda package." >&2
-            exit 1
-          fi
-          pixi upload anaconda \
+          package="$(find dist/noarch -type f -name '*.conda' -print -quit)"
+          pixi upload --no-config anaconda \
             --owner jezdez \
             --channel main \
-            "${packages[0]}"
-      - name: Verify published package
-        env:
-          RELEASE_TAG: ${{ inputs.tag }}
+            "$package"
+      - name: Verify indexed package
         run: |
           set -euo pipefail
 
-          package="$(find dist -type f -name '*.conda' -print -quit)"
+          package="$(find dist/noarch -type f -name '*.conda' -print -quit)"
           filename="${package##*/}"
           expected_sha256="$(sha256sum "$package" | cut -d ' ' -f 1)"
-          published_sha256=""
+          expected_size="$(stat -c '%s' "$package")"
+          metadata="$(
+            pixi run --locked -e build \
+              rattler-build package inspect --json "$package"
+          )"
+          build="$(jq -r '.index.build' <<< "$metadata")"
 
           for _ in {1..12}; do
-            published_sha256="$(
-              curl -fsSL https://api.anaconda.org/package/jezdez/conda-cli-mcp \
-                | jq -r \
-                  --arg basename "noarch/${filename}" \
-                  --arg version "$RELEASE_TAG" \
-                  '.files[] | select(
-                    .basename == $basename
-                    and .version == $version
-                    and (.labels | index("main"))
-                  ) | .sha256' \
-                | head -n 1
+            distribution="$(
+              curl -fsSL \
+                "https://api.anaconda.org/dist/jezdez/conda-cli-mcp/${RELEASE_TAG}/noarch/${filename}"
             )" || true
-            if [ -n "$published_sha256" ]; then
-              break
+            repodata="$(
+              curl -fsSL https://conda.anaconda.org/jezdez/noarch/repodata.json
+            )" || true
+
+            if jq -e \
+              --arg basename "noarch/${filename}" \
+              --arg build "$build" \
+              --arg sha256 "$expected_sha256" \
+              --arg version "$RELEASE_TAG" \
+              --argjson size "$expected_size" '
+                .basename == $basename
+                  and .version == $version
+                  and .sha256 == $sha256
+                  and .size == $size
+                  and (.labels | index("main"))
+                  and .attrs.build == $build
+                  and .attrs.build_number == 0
+                  and .attrs.subdir == "noarch"
+              ' <<< "$distribution" >/dev/null 2>&1 \
+              && jq -e \
+                --arg filename "$filename" \
+                --arg build "$build" \
+                --arg sha256 "$expected_sha256" \
+                --arg version "$RELEASE_TAG" \
+                --argjson size "$expected_size" '
+                  ."packages.conda"[$filename]
+                  | .name == "conda-cli-mcp"
+                    and .version == $version
+                    and .build == $build
+                    and .build_number == 0
+                    and .subdir == "noarch"
+                    and .sha256 == $sha256
+                    and .size == $size
+                ' <<< "$repodata" >/dev/null 2>&1; then
+              exit 0
             fi
             sleep 5
           done
 
-          if [ "$published_sha256" != "$expected_sha256" ]; then
-            echo "Published package digest does not match the built package." >&2
-            exit 1
-          fi
+          echo "Published package did not appear in noarch repodata." >&2
+          exit 1
