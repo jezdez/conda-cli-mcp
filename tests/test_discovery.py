@@ -4,12 +4,13 @@ import argparse
 import json
 import sys
 from dataclasses import FrozenInstanceError
-from types import ModuleType
+from importlib import metadata
+from types import ModuleType, SimpleNamespace
 
 import pytest
 
-from conda_cli_mcp.discovery import inspect_parser, main
-from conda_cli_mcp.models import ActionKind, Diagnostic, Program
+from conda_cli_mcp.discovery import inspect_parser, inspect_plugins, main
+from conda_cli_mcp.models import ActionKind, Diagnostic, Plugin, Program
 
 
 class LazyChoicesAction(argparse.Action):
@@ -251,6 +252,113 @@ def test_program_round_trips_unavailable_discovery() -> None:
     assert restored.root is None
 
 
+def test_inspect_plugins_uses_entry_points_and_public_hook_specs(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    class CondaSpecs:
+        def conda_solvers(self) -> None:
+            pass
+
+        def conda_subcommands(self) -> None:
+            pass
+
+        def unrelated_method(self) -> None:
+            pass
+
+    plugin_module = ModuleType("example_conda_plugin")
+
+    def conda_solvers() -> tuple[()]:
+        return ()
+
+    plugin_module.conda_solvers = conda_solvers
+    function_module = ModuleType("example_function_plugin")
+
+    def conda_subcommands() -> tuple[()]:
+        return ()
+
+    function_module.conda_subcommands = conda_subcommands
+    conda = ModuleType("conda")
+    conda_plugins = ModuleType("conda.plugins")
+    hookspec = ModuleType("conda.plugins.hookspec")
+    hookspec.CondaSpecs = CondaSpecs
+    monkeypatch.setitem(sys.modules, "conda", conda)
+    monkeypatch.setitem(sys.modules, "conda.plugins", conda_plugins)
+    monkeypatch.setitem(sys.modules, "conda.plugins.hookspec", hookspec)
+    monkeypatch.setitem(sys.modules, plugin_module.__name__, plugin_module)
+    monkeypatch.setitem(sys.modules, function_module.__name__, function_module)
+
+    distributions = (
+        SimpleNamespace(
+            metadata={"Name": "z-plugin"},
+            version="2.0",
+            entry_points=(
+                metadata.EntryPoint(
+                    name="solver",
+                    value=plugin_module.__name__,
+                    group="conda",
+                ),
+                metadata.EntryPoint(
+                    name="ignored",
+                    value=plugin_module.__name__,
+                    group="other",
+                ),
+            ),
+        ),
+        SimpleNamespace(
+            metadata={"Name": "a-plugin"},
+            version="1.0",
+            entry_points=(
+                metadata.EntryPoint(
+                    name="command",
+                    value=f"{function_module.__name__}:conda_subcommands",
+                    group="conda",
+                ),
+                metadata.EntryPoint(
+                    name="broken",
+                    value="missing_conda_plugin",
+                    group="conda",
+                ),
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        "conda_cli_mcp.discovery.metadata.distributions",
+        lambda: distributions,
+    )
+
+    plugins = inspect_plugins()
+
+    assert plugins == (
+        Plugin(
+            distribution="a-plugin",
+            version="1.0",
+            entry_point="broken",
+            value="missing_conda_plugin",
+        ),
+        Plugin(
+            distribution="a-plugin",
+            version="1.0",
+            entry_point="command",
+            value="example_function_plugin:conda_subcommands",
+            hooks=("conda_subcommands",),
+        ),
+        Plugin(
+            distribution="z-plugin",
+            version="2.0",
+            entry_point="solver",
+            value="example_conda_plugin",
+            hooks=("conda_solvers",),
+        ),
+    )
+    assert Plugin.from_dict(plugins[1].as_dict()) == plugins[1]
+
+    assert main(["--plugins"]) == 0
+    assert json.loads(capsys.readouterr().out) == [
+        plugin.as_dict() for plugin in plugins
+    ]
+
+
 def test_module_entry_point_prints_catalog_json(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -265,8 +373,9 @@ def test_module_entry_point_prints_catalog_json(
     monkeypatch.setitem(sys.modules, "conda.cli", conda_cli)
     monkeypatch.setitem(sys.modules, "conda.cli.conda_argparse", conda_argparse)
 
-    assert main() == 0
+    assert main([]) == 0
 
     payload = json.loads(capsys.readouterr().out)
     assert payload["prog"] == "target-conda"
     assert payload["conda_version"] == "99.1"
+    assert "plugins" not in payload

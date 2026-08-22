@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 import pytest
 from mcp import Client, MCPError
 
+from conda_cli_mcp.capabilities import Capabilities
 from conda_cli_mcp.models import (
     ActionKind,
     Argument,
@@ -13,7 +15,11 @@ from conda_cli_mcp.models import (
     ExecutionResult,
     Program,
 )
-from conda_cli_mcp.server import EXECUTE_TOOL_NAME, CondaMCPServer
+from conda_cli_mcp.server import (
+    CAPABILITIES_URI,
+    EXECUTE_TOOL_NAME,
+    CondaMCPServer,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -87,13 +93,18 @@ async def test_generated_tool_compiles_and_executes_scoped_argv() -> None:
             children=(Command(name="info"),),
         ),
     )
-    server = CondaMCPServer(executor, program)  # type: ignore[arg-type]
+    capabilities = Capabilities("conda", program, ())
+    server = CondaMCPServer(executor, capabilities)  # type: ignore[arg-type]
 
     async with Client(server.server) as client:
         listed = await client.list_tools()
+        resources = await client.list_resources()
+        resource = await client.read_resource(CAPABILITIES_URI)
         result = await client.call_tool("conda_info", {"verbose": 2})
 
     assert [tool.name for tool in listed.tools] == ["conda_execute", "conda_info"]
     assert listed.tools[1].output_schema is not None
+    assert [str(item.uri) for item in resources.resources] == [CAPABILITIES_URI]
+    assert json.loads(resource.contents[0].text)["generated_tools"] == ["conda_info"]
     assert executor.calls == [("--verbose", "--verbose", "info")]
     assert result.structured_content["parsed_json"] == {"ok": True}

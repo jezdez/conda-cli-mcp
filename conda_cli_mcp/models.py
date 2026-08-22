@@ -73,6 +73,38 @@ class ActionKind(str, Enum):
 
 
 @dataclass(frozen=True, slots=True)
+class Plugin:
+    """Installed metadata for one external conda plugin entry point."""
+
+    distribution: str
+    version: str
+    entry_point: str
+    value: str
+    hooks: tuple[str, ...] = ()
+
+    def as_dict(self) -> dict[str, JsonValue]:
+        """Return a JSON-compatible representation."""
+        return {
+            "distribution": self.distribution,
+            "version": self.version,
+            "entry_point": self.entry_point,
+            "value": self.value,
+            "hooks": list(self.hooks),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> Plugin:
+        """Restore plugin metadata from its JSON-compatible representation."""
+        return cls(
+            distribution=data["distribution"],
+            version=data["version"],
+            entry_point=data["entry_point"],
+            value=data["value"],
+            hooks=tuple(data["hooks"]),
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class Argument:
     """One positional or optional argument accepted by a command."""
 

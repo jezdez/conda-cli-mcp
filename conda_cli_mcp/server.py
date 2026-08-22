@@ -11,8 +11,12 @@ from mcp.server.stdio import stdio_server
 from mcp.types import (
     INVALID_PARAMS,
     CallToolResult,
+    ListResourcesResult,
     ListToolsResult,
+    ReadResourceResult,
+    Resource,
     TextContent,
+    TextResourceContents,
     Tool,
     ToolAnnotations,
 )
@@ -24,11 +28,17 @@ if TYPE_CHECKING:
     from typing import Any, Final
 
     from mcp.server import ServerRequestContext
-    from mcp.types import CallToolRequestParams, PaginatedRequestParams
+    from mcp.types import (
+        CallToolRequestParams,
+        PaginatedRequestParams,
+        ReadResourceRequestParams,
+    )
 
+    from .capabilities import Capabilities
     from .execution import CondaExecutor
-    from .models import ExecutionResult, Program
+    from .models import ExecutionResult
 
+CAPABILITIES_URI: Final = "conda://capabilities"
 EXECUTE_TOOL_NAME: Final = "conda_execute"
 EXECUTION_OUTPUT_SCHEMA: Final[dict[str, Any]] = {
     "type": "object",
@@ -91,9 +101,13 @@ class CondaMCPServer:
     def __init__(
         self,
         executor: CondaExecutor,
-        program: Program | None = None,
+        capabilities: Capabilities | None = None,
     ) -> None:
         self.executor = executor
+        self.capabilities = capabilities
+        self.capabilities_json = (
+            capabilities.to_json() if capabilities is not None else None
+        )
         self.execute_tool = Tool(
             name=EXECUTE_TOOL_NAME,
             description="Run an argument vector with the configured conda executable.",
@@ -108,7 +122,7 @@ class CondaMCPServer:
         )
         self.input_validator = Draft202012Validator(EXECUTE_INPUT_SCHEMA)
         self.output_validator = Draft202012Validator(EXECUTION_OUTPUT_SCHEMA)
-        self.program = program
+        program = capabilities.program if capabilities is not None else None
         self.generated_tools = (
             {tool.name: tool for tool in command_tools(program)}
             if program is not None
@@ -119,6 +133,49 @@ class CondaMCPServer:
             version=__version__,
             on_list_tools=self.list_tools,
             on_call_tool=self.call_tool,
+            on_list_resources=self.list_resources,
+            on_read_resource=self.read_resource,
+        )
+
+    async def list_resources(
+        self,
+        _context: ServerRequestContext,
+        _params: PaginatedRequestParams | None,
+    ) -> ListResourcesResult:
+        """List safe metadata for the configured conda installation."""
+        if self.capabilities_json is None:
+            return ListResourcesResult(resources=[])
+        return ListResourcesResult(
+            resources=[
+                Resource(
+                    name="conda_capabilities",
+                    title="Conda CLI capabilities",
+                    uri=CAPABILITIES_URI,
+                    description=(
+                        "Startup command catalog and external plugin metadata."
+                    ),
+                    mime_type="application/json",
+                    size=len(self.capabilities_json.encode()),
+                )
+            ]
+        )
+
+    async def read_resource(
+        self,
+        _context: ServerRequestContext,
+        params: ReadResourceRequestParams,
+    ) -> ReadResourceResult:
+        """Read the immutable startup capability document."""
+        if str(params.uri) != CAPABILITIES_URI or self.capabilities_json is None:
+            raise MCPError(INVALID_PARAMS, f"Unknown resource: {params.uri}")
+        return ReadResourceResult(
+            contents=[
+                TextResourceContents(
+                    uri=CAPABILITIES_URI,
+                    mime_type="application/json",
+                    text=self.capabilities_json,
+                )
+            ]
         )
 
     async def list_tools(

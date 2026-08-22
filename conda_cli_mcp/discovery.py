@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from collections.abc import Mapping
+from importlib import metadata
 from typing import TYPE_CHECKING
 
 from .models import (
@@ -11,17 +13,75 @@ from .models import (
     Command,
     Diagnostic,
     ExclusiveGroup,
+    Plugin,
     Program,
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Iterable, Sequence
 
     from .models import NArgs, ValueType
 
 
 class _UnsupportedParserFeature(ValueError):
     pass
+
+
+def inspect_plugins() -> tuple[Plugin, ...]:
+    """Inspect external conda entry points installed in this interpreter."""
+    from conda.plugins.hookspec import CondaSpecs
+
+    hook_names = tuple(
+        sorted(
+            name
+            for name in dir(CondaSpecs)
+            if name.startswith("conda_") and callable(getattr(CondaSpecs, name))
+        )
+    )
+    plugins: list[Plugin] = []
+    for distribution in metadata.distributions():
+        distribution_name = distribution.metadata["Name"]
+        if not distribution_name:
+            continue
+        for entry_point in distribution.entry_points:
+            if entry_point.group != "conda":
+                continue
+            try:
+                loaded = entry_point.load()
+            except Exception:
+                hooks: tuple[str, ...] = ()
+            else:
+                implemented: list[str] = []
+                plugin_name = getattr(loaded, "__name__", None)
+                if callable(loaded) and plugin_name in hook_names:
+                    implemented.append(plugin_name)
+                for hook_name in hook_names:
+                    try:
+                        implementation = getattr(loaded, hook_name)
+                    except (AttributeError, TypeError):
+                        continue
+                    if callable(implementation):
+                        implemented.append(hook_name)
+                hooks = tuple(sorted(set(implemented)))
+            plugins.append(
+                Plugin(
+                    distribution=distribution_name,
+                    version=distribution.version,
+                    entry_point=entry_point.name,
+                    value=entry_point.value,
+                    hooks=hooks,
+                )
+            )
+    return tuple(
+        sorted(
+            plugins,
+            key=lambda plugin: (
+                plugin.distribution.casefold(),
+                plugin.entry_point.casefold(),
+                plugin.value,
+            ),
+        )
+    )
 
 
 def inspect_parser(
@@ -279,8 +339,18 @@ def _qualified_name(action: argparse.Action) -> str:
     return f"{action_type.__module__}.{action_type.__qualname__}"
 
 
-def main() -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     """Print discovery JSON from the target conda interpreter."""
+    worker_parser = argparse.ArgumentParser()
+    worker_parser.add_argument("--plugins", action="store_true")
+    options = worker_parser.parse_args(argv)
+    if options.plugins:
+        payload = [plugin.as_dict() for plugin in inspect_plugins()]
+        sys.stdout.write(
+            f"{json.dumps(payload, separators=(',', ':'), sort_keys=True)}\n"
+        )
+        return 0
+
     from conda import __version__ as conda_version
     from conda.cli.conda_argparse import generate_parser
 

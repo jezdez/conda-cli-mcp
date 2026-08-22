@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 import anyio
@@ -9,7 +10,9 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
 from . import __version__
+from .capabilities import Capabilities
 from .execution import CondaExecutor
+from .models import Diagnostic
 from .server import CondaMCPServer
 
 
@@ -36,7 +39,23 @@ def create_parser() -> argparse.ArgumentParser:
 async def serve(executor: CondaExecutor) -> None:
     """Discover the target conda CLI and serve it over standard I/O."""
     program = await executor.discover()
-    await CondaMCPServer(executor, program).run_stdio()
+    try:
+        plugins = await executor.discover_plugins()
+    except RuntimeError as error:
+        program = replace(
+            program,
+            diagnostics=(
+                *program.diagnostics,
+                Diagnostic(path=(), reason=str(error)[:512]),
+            ),
+        )
+        plugins = ()
+    capabilities = Capabilities(
+        target_executable=str(executor.executable),
+        program=program,
+        plugins=plugins,
+    )
+    await CondaMCPServer(executor, capabilities).run_stdio()
 
 
 def main(argv: Sequence[str] | None = None) -> None:
