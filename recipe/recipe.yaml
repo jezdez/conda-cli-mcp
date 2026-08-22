@@ -20,7 +20,7 @@ build:
     content: ${{ PYTHON }} -m pip install . -vv --no-deps --no-build-isolation
   python:
     entry_points:
-      - conda-cli-mcp = conda_cli_mcp.cli:main
+      - ccm = conda_cli_mcp.cli:main
 
 requirements:
   host:
@@ -45,7 +45,8 @@ tests:
       run:
         - python ${{ python_min }}.*
     script:
-      - conda-cli-mcp --allow-write --allow-exec --output-limit-bytes 1048576 --stdin-limit-bytes 1048576 --help
+      - ccm --allow-write --allow-exec --output-limit-bytes 1048576 --stdin-limit-bytes 1048576 --help
+      - conda mcp --help
 
 about:
   summary: Expose conda and its plugin commands through the Model Context Protocol

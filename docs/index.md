@@ -27,10 +27,10 @@ interface.
 :::
 
 :::{grid-item-card} {octicon}`tools` How-to guides
-:link: how-to/configure-the-server
+:link: how-to/install-with-conda
 :link-type: doc
 
-Select a conda installation, set execution limits, enable operations, and
+Install from conda, select a target conda, set limits, enable operations, and
 refresh tools after plugin changes.
 :::
 
@@ -70,6 +70,7 @@ tutorials/getting-started
 :caption: How-to guides
 
 how-to/configure-the-server
+how-to/install-with-conda
 how-to/enable-operations
 how-to/refresh-plugin-tools
 ```

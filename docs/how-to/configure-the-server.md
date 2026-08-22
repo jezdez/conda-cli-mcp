@@ -9,7 +9,7 @@ Pass an executable path when the MCP server and target conda live in different
 environments:
 
 ```console
-conda-cli-mcp --conda-exe /absolute/path/to/conda
+ccm --conda-exe /absolute/path/to/conda
 ```
 
 Resolution follows this order:
@@ -30,7 +30,7 @@ output stream and accepts at most 1 MiB of raw-tool input.
 Set different positive limits at startup:
 
 ```console
-conda-cli-mcp \
+ccm \
   --conda-exe /absolute/path/to/conda \
   --timeout 120 \
   --output-limit-bytes 2097152 \

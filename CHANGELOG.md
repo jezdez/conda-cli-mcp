@@ -6,6 +6,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## Unreleased
 
+### Added
+
+- Added `conda mcp` when the package is installed in conda's environment.
+- Added `ccm` as the standalone server command.
+- Added conda package publication to the `jezdez/main` channel.
+
+### Removed
+
+- Removed the `conda-cli-mcp` console command in favor of `ccm`.
+
 ## 0.1.0 — 2026-08-22
 
 ### Added

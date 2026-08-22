@@ -55,8 +55,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write
-      pages: write
+      id-token: write # authenticate the deployment to GitHub Pages
+      pages: write # publish the built documentation site
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

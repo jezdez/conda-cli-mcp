@@ -4,6 +4,12 @@
 installation. It does not replace conda's command dispatcher or expose each
 plugin hook as a separate protocol concept.
 
+The `ccm` console command can target another conda installation explicitly.
+When this distribution is installed alongside conda, its `conda mcp` plugin
+command selects that invoking installation automatically and starts a clean
+server process. This keeps conda's initialized global context and plugin
+objects out of the long-lived MCP server.
+
 ## Startup discovery
 
 The server first asks the selected executable for `conda info --json`. This

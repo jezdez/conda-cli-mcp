@@ -16,13 +16,16 @@ conda installation.
 Install the server without modifying the target conda environment:
 
 ```console
-pipx install conda-cli-mcp
+pipx install "conda-cli-mcp>=0.2"
 ```
+
+The version constraint prevents the incompatible 0.1.0 console command from
+being installed with this guide.
 
 Confirm the server and target conda are available:
 
 ```console
-conda-cli-mcp --version
+ccm --version
 conda --version
 ```
 
@@ -32,7 +35,7 @@ Find the absolute executable paths that the MCP client will use.
 :::{tab-item} POSIX
 
 ```console
-python3 -c "import shutil; print(shutil.which('conda-cli-mcp'))"
+python3 -c "import shutil; print(shutil.which('ccm'))"
 python3 -c "import os, shutil; print(os.environ.get('CONDA_EXE') or shutil.which('conda'))"
 ```
 
@@ -40,7 +43,7 @@ python3 -c "import os, shutil; print(os.environ.get('CONDA_EXE') or shutil.which
 :::{tab-item} PowerShell
 
 ```powershell
-py -c "import shutil; print(shutil.which('conda-cli-mcp'))"
+py -c "import shutil; print(shutil.which('ccm'))"
 py -c "import os, shutil; print(os.environ.get('CONDA_EXE') or shutil.which('conda.exe'))"
 ```
 
@@ -58,7 +61,7 @@ Add a stdio server entry using the two paths from the previous step:
 {
   "mcpServers": {
     "conda": {
-      "command": "/absolute/path/to/conda-cli-mcp",
+      "command": "/absolute/path/to/ccm",
       "args": ["--conda-exe", "/absolute/path/to/conda"]
     }
   }

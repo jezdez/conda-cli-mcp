@@ -35,9 +35,9 @@ def positive_int(value: str) -> int:
 
 
 def create_parser() -> argparse.ArgumentParser:
-    """Create the conda-cli-mcp command-line parser."""
+    """Create the ccm command-line parser."""
     parser = argparse.ArgumentParser(
-        prog="conda-cli-mcp",
+        prog="ccm",
         description="Expose an installed conda CLI through MCP.",
     )
     parser.add_argument(

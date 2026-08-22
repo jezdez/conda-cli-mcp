@@ -16,16 +16,18 @@ the plugin's public Python API.
 The project is alpha software. It requires Python 3.10 or newer and supports
 target conda versions `>=26.7,<27`.
 
+Run the standalone server as `ccm`. When the package is installed in conda's
+own environment, `conda mcp` launches the server against that conda
+installation without requiring `--conda-exe`. These launchers require
+`conda-cli-mcp` 0.2.0 or newer.
+
 ## Installation
 
-Install the published command into an isolated environment:
+Choose the installation path that matches the MCP host:
 
-```console
-pipx install conda-cli-mcp
-```
-
-Keep the server environment separate from the target conda installation and
-select that installation with `--conda-exe`.
+- [Start with pipx](docs/tutorials/getting-started.md)
+- [Install with conda](docs/how-to/install-with-conda.md)
+- [Configure the server](docs/how-to/configure-the-server.md)
 
 ## Documentation
 
@@ -53,7 +55,7 @@ Select the target conda executable explicitly when it lives in another
 environment:
 
 ```console
-conda-cli-mcp --conda-exe /absolute/path/to/conda
+ccm --conda-exe /absolute/path/to/conda
 ```
 
 Without `--conda-exe`, resolution checks `CONDA_EXE` and then `PATH`. MCP
@@ -66,6 +68,9 @@ configuration.
 - `conda-cli-mcp` owns local conda CLI discovery and execution.
 - [`conda-meta-mcp`](https://github.com/conda-incubator/conda-meta-mcp) owns
   read-only package and ecosystem metadata.
+- [`conda-runtime`](https://github.com/jezdez/conda-runtime) owns the
+  ready-to-run conda executable and can include this plugin as a locked runtime
+  dependency.
 - `conda-mcp` is reserved for a future umbrella package that installs both.
 
 ## Development

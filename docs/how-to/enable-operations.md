@@ -8,7 +8,7 @@ immutable for the server lifetime and is enforced before spawning conda.
 Enable environment, package, configuration, cache, and file mutations:
 
 ```console
-conda-cli-mcp \
+ccm \
   --conda-exe /absolute/path/to/conda \
   --allow-write
 ```
@@ -22,7 +22,7 @@ supports them.
 Enable `conda run` and expose the raw argv tool:
 
 ```console
-conda-cli-mcp \
+ccm \
   --conda-exe /absolute/path/to/conda \
   --allow-exec
 ```
@@ -37,7 +37,7 @@ Use both options when the client must invoke arbitrary or opaque operations
 that may also mutate state:
 
 ```console
-conda-cli-mcp \
+ccm \
   --conda-exe /absolute/path/to/conda \
   --allow-write \
   --allow-exec

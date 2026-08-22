@@ -2,10 +2,15 @@
 
 ## Project contract
 
-- The repository, distribution, and console command are named
-  `conda-cli-mcp`. The Python package is `conda_cli_mcp`.
+- The repository and distribution are named `conda-cli-mcp`. The
+  standalone console command is `ccm`, and the Python package is
+  `conda_cli_mcp`.
   `conda-mcp` is reserved for the future umbrella package that brings
   `conda-cli-mcp` and `conda-meta-mcp` together.
+
+- The distribution registers `conda mcp` through conda's public
+  subcommand plugin hook. It launches the server in a clean process and
+  targets the conda installation that loaded the plugin by default.
 
 - The server exposes the CLI accepted by the configured conda
   executable, including subcommands contributed through conda plugin

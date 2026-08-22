@@ -11,7 +11,8 @@ if TYPE_CHECKING:
 
 
 def test_create_parser_accepts_server_options() -> None:
-    args = create_parser().parse_args(
+    parser = create_parser()
+    args = parser.parse_args(
         [
             "--conda-exe",
             "/tmp/conda",
@@ -26,6 +27,7 @@ def test_create_parser_accepts_server_options() -> None:
         ]
     )
 
+    assert parser.prog == "ccm"
     assert args.conda_exe == "/tmp/conda"
     assert args.timeout == 12
     assert args.output_limit_bytes == 2048

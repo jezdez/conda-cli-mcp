@@ -1,11 +1,15 @@
 # Server command-line reference
 
-`conda-cli-mcp` starts one MCP server over standard input and standard output.
+`ccm` starts one MCP server over standard input and standard output.
+
+When the distribution is installed in conda's environment, the public conda
+plugin hook also provides `conda mcp`. That launcher selects the invoking conda
+installation automatically and starts the same server in a clean process.
 
 ## Usage
 
 ```text
-conda-cli-mcp [--conda-exe PATH] [--timeout SECONDS]
+ccm [--conda-exe PATH] [--timeout SECONDS]
               [--output-limit-bytes BYTES] [--stdin-limit-bytes BYTES]
               [--allow-write] [--allow-exec] [--version]
 ```
@@ -21,6 +25,10 @@ conda-cli-mcp [--conda-exe PATH] [--timeout SECONDS]
 | `--allow-write` | disabled | Permit operations classified as mutations |
 | `--allow-exec` | disabled | Permit arbitrary execution and expose `conda_execute` |
 | `--version` | | Print the server version and exit |
+
+`conda mcp` forwards these options to the same parser. It is unavailable when
+conda starts with `--no-plugins`. The standalone `ccm` command remains
+available.
 
 The selected target must be a file. Windows batch launchers are rejected, so
 select `conda.exe` directly.
