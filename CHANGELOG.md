@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## Unreleased
 
+## 0.2.0 — 2026-08-22
+
 ### Added
 
 - Added `conda mcp` when the package is installed in conda's environment.
