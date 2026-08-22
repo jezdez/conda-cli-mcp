@@ -61,6 +61,7 @@ jobs:
           cache: true
           cache-write: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
       - run: pixi run -e "$PIXI_ENVIRONMENT" test
+        shell: bash
         env:
           PIXI_ENVIRONMENT: ${{ matrix.python.environment }}
 
