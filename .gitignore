@@ -1,0 +1,10 @@
+/.pixi/
+/.pytest_cache/
+/.ruff_cache/
+/.venv/
+/dist/
+/htmlcov/
+/.coverage
+__pycache__/
+*.py[cod]
+*.egg-info/
