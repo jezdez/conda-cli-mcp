@@ -25,10 +25,10 @@ command = sys.argv[1]
 if command == "json":
     print(json.dumps({"argv": sys.argv[2:]}))
 elif command == "literal":
-    sys.stdout.write(sys.argv[2])
+    sys.stdout.buffer.write(sys.argv[2].encode())
 elif command == "streams":
-    print("stdout-value")
-    print("stderr-value", file=sys.stderr)
+    sys.stdout.buffer.write(b"stdout-value\\n")
+    sys.stderr.buffer.write(b"stderr-value\\n")
     raise SystemExit(7)
 elif command == "large-streams":
     size = int(sys.argv[2])
@@ -37,7 +37,7 @@ elif command == "large-streams":
     sys.stderr.buffer.write(b"e" * size)
     sys.stderr.buffer.flush()
 elif command == "stdin":
-    print(sys.stdin.read())
+    sys.stdout.buffer.write(sys.stdin.buffer.read() + b"\\n")
 elif command == "cwd":
     print(Path.cwd())
 elif command == "linger":

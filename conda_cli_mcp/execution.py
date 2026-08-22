@@ -88,9 +88,10 @@ class CondaExecutor:
         candidate = (
             os.fspath(executable) if executable is not None else os.getenv("CONDA_EXE")
         )
-        resolved = shutil.which(candidate or "conda")
+        default_executable = "conda.exe" if os.name == "nt" else "conda"
+        resolved = shutil.which(candidate or default_executable)
         if resolved is None:
-            raise FileNotFoundError(candidate or "conda")
+            raise FileNotFoundError(candidate or default_executable)
         return cls(
             Path(resolved),
             timeout_seconds=timeout_seconds,
@@ -335,23 +336,42 @@ class CondaExecutor:
     ) -> ExecutionResult:
         async with self._lock:
             started = time.monotonic()
+            windows_job: Any = None
+            creation_flags = 0
+            if os.name == "nt":
+                from .windows import CREATE_SUSPENDED, WindowsJob
+
+                windows_job = WindowsJob()
+                creation_flags = subprocess.CREATE_NEW_PROCESS_GROUP | CREATE_SUSPENDED
             process_options: dict[str, Any] = (
-                {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+                {"creationflags": creation_flags}
                 if os.name == "nt"
                 else {"start_new_session": True}
             )
-            process = await asyncio.create_subprocess_exec(
-                *command,
-                stdin=(
-                    asyncio.subprocess.PIPE
-                    if stdin is not None
-                    else asyncio.subprocess.DEVNULL
-                ),
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                cwd=cwd,
-                **process_options,
-            )
+            process = None
+            try:
+                process = await asyncio.create_subprocess_exec(
+                    *command,
+                    stdin=(
+                        asyncio.subprocess.PIPE
+                        if stdin is not None
+                        else asyncio.subprocess.DEVNULL
+                    ),
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    cwd=cwd,
+                    **process_options,
+                )
+                if windows_job is not None:
+                    windows_job.assign_and_resume(process.pid)
+            except BaseException:
+                if process is not None and process.returncode is None:
+                    with suppress(OSError):
+                        process.kill()
+                    await process.wait()
+                if windows_job is not None:
+                    windows_job.close()
+                raise
             assert process.stdout is not None
             assert process.stderr is not None
 
@@ -396,7 +416,7 @@ class CondaExecutor:
                     with suppress(OSError):
                         os.kill(process.pid, signal.CTRL_BREAK_EVENT)
                 else:
-                    with suppress(ProcessLookupError):
+                    with suppress(OSError):
                         os.killpg(process.pid, signal.SIGTERM)
                 try:
                     if not wait_task.done():
@@ -408,21 +428,10 @@ class CondaExecutor:
                     pass
 
                 if os.name == "nt":
-                    killer = await asyncio.create_subprocess_exec(
-                        "taskkill.exe",
-                        "/PID",
-                        str(process.pid),
-                        "/T",
-                        "/F",
-                        stdout=asyncio.subprocess.DEVNULL,
-                        stderr=asyncio.subprocess.DEVNULL,
-                    )
-                    await killer.wait()
-                    if process.returncode is None:
-                        with suppress(ProcessLookupError):
-                            process.kill()
+                    assert windows_job is not None
+                    windows_job.terminate()
                 else:
-                    with suppress(ProcessLookupError):
+                    with suppress(OSError):
                         os.killpg(process.pid, signal.SIGKILL)
                 if not wait_task.done():
                     await wait_task
@@ -451,6 +460,9 @@ class CondaExecutor:
                             task.cancel()
                     await asyncio.gather(*tasks, return_exceptions=True)
                 raise
+            finally:
+                if windows_job is not None:
+                    windows_job.close()
 
         stdout, stdout_truncated = stdout_result
         stderr, stderr_truncated = stderr_result

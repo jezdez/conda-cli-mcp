@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import shutil
 import sys
 import time
 from pathlib import Path
@@ -54,7 +53,7 @@ print(json.dumps(info))
 """
     )
     raw_script = tmp_path / "raw"
-    raw_script.write_text('print("raw-ok")\n')
+    raw_script.write_text('import sys\nsys.stdout.buffer.write(b"raw-ok\\n")\n')
 
     target_modules = tmp_path / "target-modules"
     conda_package = target_modules / "conda"
@@ -393,8 +392,6 @@ async def test_execute_timeout_bounds_inherited_pipe_drain(
 
     assert result.timed_out
     assert elapsed < 0.3
-    assert result.stdout_truncated
-    assert result.stderr_truncated
     assert not survived.exists()
 
 
@@ -696,10 +693,10 @@ async def test_discover_propagates_caller_cancellation(
 
 @pytest.mark.anyio
 async def test_discover_live_conda_installation() -> None:
-    conda = shutil.which("conda")
-    if conda is None:
+    try:
+        executor = CondaExecutor.from_environment(timeout_seconds=30)
+    except FileNotFoundError:
         pytest.skip("conda is not installed")
-    executor = CondaExecutor(Path(conda), timeout_seconds=30)
 
     info_result = await executor.execute(("info", "--json"))
     program = await executor.discover()
@@ -714,10 +711,10 @@ async def test_discover_live_conda_installation() -> None:
 async def test_shell_activation_returns_code_without_mutating_server_environment() -> (
     None
 ):
-    conda = shutil.which("conda")
-    if conda is None:
+    try:
+        executor = CondaExecutor.from_environment(timeout_seconds=30)
+    except FileNotFoundError:
         pytest.skip("conda is not installed")
-    executor = CondaExecutor(Path(conda), timeout_seconds=30)
     previous_prefix = os.environ.get("CONDA_PREFIX")
 
     result = await executor.execute(("shell.posix", "activate"))

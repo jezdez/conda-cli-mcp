@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import os
-import shutil
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
@@ -12,6 +10,7 @@ from conda_cli_mcp.models import Plugin
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
+    from pathlib import Path
 
 
 @pytest.fixture
@@ -19,8 +18,9 @@ def conda_with_fixture_plugin(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> Iterator[tuple[CondaExecutor, Path]]:
-    conda = shutil.which("conda")
-    if conda is None:
+    try:
+        executor = CondaExecutor.from_environment(timeout_seconds=30)
+    except FileNotFoundError:
         pytest.skip("conda is not installed")
 
     plugin_root = tmp_path / "plugin"
@@ -103,7 +103,7 @@ mcp-fixture = conda_cli_mcp_fixture_plugin
     monkeypatch.setenv("PYTHONPATH", python_path)
     monkeypatch.setenv("CONDA_CLI_MCP_PLUGIN_EVENTS", str(events))
     monkeypatch.delenv("CONDA_NO_PLUGINS", raising=False)
-    yield CondaExecutor(Path(conda), timeout_seconds=30), events
+    yield executor, events
 
 
 @pytest.mark.anyio
